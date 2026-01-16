@@ -1,5 +1,4 @@
-# Maximum Reality Game 🎮🐈‍⬛
-
+# Maximum Reality Game 🎮😸
 Welcome to **Maximum Reality**, a neon-drenched, cyber-cat arcade game featuring:
 
 - 🏙 Procedurally generated neon city skyline  
