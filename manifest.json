@@ -7,7 +7,7 @@
   "orientation": "portrait",
   "background_color": "#050505",
   "theme_color": "#ff00ff",
-  "description": "Retro-hacker survival in Maximum Reality.",
+  "description": "Retro-hacker survival experience created by Maximum Reality.",
   "icons": [
     {
       "src": "logo.png",
@@ -19,6 +19,15 @@
       "src": "hacker-favicon.PNG",
       "sizes": "512x512",
       "type": "image/png"
+    }
+  ],
+  "categories": ["games", "entertainment"],
+  "screenshots": [
+    {
+      "src": "logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "label": "Sphynx Overdrive Gameplay"
     }
   ]
 }
