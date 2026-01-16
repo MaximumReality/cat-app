@@ -8,11 +8,11 @@
 <style>
     body { background: #000; margin: 0; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; display: flex; justify-content: center; align-items: center; height: 100vh; }
     #game-container { position: relative; width: 400px; height: 600px; background: #050505; border: 4px solid #ff00ff; box-shadow: 0 0 20px #ff00ff; overflow: hidden; display: none; }
-    canvas { position: absolute; top: 0; left: 0; }
+    canvas { position: absolute; top: 0; left: 0; transition: filter 0.1s; }
     #ui { position: absolute; width: 100%; display: flex; justify-content: space-between; padding: 10px; color: #00ffff; text-shadow: 0 0 5px #00ffff; z-index: 10; box-sizing: border-box; pointer-events: none; }
     #sound-toggle { position: absolute; bottom: 10px; left: 10px; z-index: 100; font-size: 24px; cursor: pointer; background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; border: 1px solid #00ffff; }
-    #game-over { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #ff00ff; z-index: 20; background: rgba(0,0,0,0.9); padding: 20px; border: 2px solid #00ffff; }
-    button { background: #00ffff; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+    #game-over { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #ff00ff; z-index: 20; background: rgba(0,0,0,0.9); padding: 20px; border: 2px solid #00ffff; min-width: 250px; }
+    button { background: #00ffff; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; margin-top: 15px; }
     .crt-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.1) 50%), linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03)); background-size: 100% 3px, 3px 100%; pointer-events: none; z-index: 5; }
     #splash-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; color: #0f0; padding: 20px; box-sizing: border-box; z-index: 9999; display: flex; flex-direction: column; }
     #terminal-output { white-space: pre-wrap; flex-grow: 1; overflow: hidden; font-size: 14px; line-height: 1.4; }
@@ -21,6 +21,7 @@
     #credibility-badge { position: fixed; bottom: 20px; right: 20px; width: 80px; z-index: 10000; opacity: 0.85; mix-blend-mode: screen; pointer-events: none; animation: glitch 1.5s infinite; }
     @keyframes glitch { 0% { transform: translate(0,0); filter: hue-rotate(0deg); } 20% { transform: translate(-2px,1px); filter: hue-rotate(20deg); } 100% { transform: translate(0,0); filter: hue-rotate(0deg); } }
     .pulse { transform: scale(1.3); transition: transform 0.1s ease; }
+    .damage-flash { filter: invert(30%) sepia(100%) saturate(1000%) hue-rotate(320deg) brightness(100%) contrast(100%) !important; }
 </style>
 </head>
 <body>
@@ -37,35 +38,37 @@
     <canvas id="particleCanvas"></canvas>
     <div id="ui"><div id="score">DATA: 0kb</div><div id="lives">NODES: 3</div></div>
     <div class="crt-overlay"></div>
-    <div id="game-over"><h1>SYSTEM CRASHED</h1><button onclick="resetGame()">REBOOT</button></div>
+    <div id="game-over">
+        <h1>SYSTEM CRASHED</h1>
+        <div id="final-stats" style="color: #00ffff; margin-bottom: 10px; font-size: 14px;"></div>
+        <button onclick="resetGame()">REBOOT</button>
+    </div>
 </div>
 
 <img id="credibility-badge" src="credibility_badge.png" alt="Trusted Badge">
 
 <script>
-// --- AUDIO ENGINE ---
 let audioCtx, isMuted = true;
 function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 function playBeep(f, d) { if (isMuted || !audioCtx) return; const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.type='square'; o.frequency.setValueAtTime(f, audioCtx.currentTime); g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime+d); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+d); }
 function toggleSound() { initAudio(); isMuted = !isMuted; document.getElementById('sound-toggle').innerText = isMuted ? '🔇' : '🔊'; if(!isMuted) playBeep(440, 0.1); }
 
-// --- GAME GLOBALS ---
 const W = 400, H = 600;
 const bgCanvas = document.getElementById('bgCanvas'), bctx = bgCanvas.getContext('2d');
 const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d');
 const pCanvas = document.getElementById('particleCanvas'), pctx = pCanvas.getContext('2d');
 bgCanvas.width = canvas.width = pCanvas.width = W; bgCanvas.height = canvas.height = pCanvas.height = H;
 
+// Persistant Memory
 let score = 0, lives = 3, frame = 0, gameActive = true, screenShake = 0;
+let highScore = localStorage.getItem('sphynxHighScore') || 0;
 let obstacles = [], buildings = [], butterflies = [];
 const cat = { x: 180, y: 520, w: 40, h: 40 };
 
 const azulImg = new Image(); azulImg.src = 'flyazulo.png';
 const mochNormal = new Image(); mochNormal.src = 'mochkil_front_kart.png';
-const mochSnack = new Image(); mochSnack.src = 'mochkil_walk_right_cake.png';
 const firewallImg = new Image(); firewallImg.src = 'firewall.png';
 
-// --- CLASSES ---
 class Building {
     constructor(x) { this.x=x; this.w=Math.random()*60+40; this.h=Math.random()*200+100; this.y=Math.random()*H; this.speed=0.5; this.color=`hsl(280,100%,${Math.random()*10+2}%)`; }
     update(s){ this.y += s*this.speed; if(this.y>H){ this.y=-this.h; this.x=Math.random()*W; } }
@@ -77,16 +80,20 @@ class Butterfly {
     draw(){ pctx.fillStyle='#00ffff44'; pctx.beginPath(); pctx.arc(this.x,this.y,2,0,Math.PI*2); pctx.fill(); }
 }
 
-function applyShake(){ if(screenShake>0){ ctx.translate(Math.random()*screenShake-screenShake/2, Math.random()*screenShake-screenShake/2); screenShake*=0.9; } }
+function triggerDamageEffect() {
+    canvas.classList.add('damage-flash');
+    setTimeout(() => canvas.classList.remove('damage-flash'), 150);
+}
 
 function update(){
     if(!gameActive) return;
     bctx.fillStyle='#050005'; bctx.fillRect(0,0,W,H);
     buildings.forEach(b=>{ b.update(2+score/100); b.draw(); });
-    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H); applyShake();
+    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H); 
+    if(screenShake>0){ ctx.translate(Math.random()*screenShake-screenShake/2, Math.random()*screenShake-screenShake/2); screenShake*=0.9; }
     
     ctx.drawImage(azulImg,50,50,100,40);
-    ctx.drawImage(mochNormal, -100 + (frame%500), 450, 40, 40); // Simple Mochkil movement
+    ctx.drawImage(mochNormal, -100 + (frame%600), 450, 40, 40);
     
     ctx.font='40px serif'; ctx.shadowBlur=15; ctx.shadowColor='#00ffff'; ctx.fillText('🐈‍⬛',cat.x,cat.y+35); ctx.shadowBlur=0;
 
@@ -103,8 +110,13 @@ function update(){
         let hitW = o.type==='firewall' ? 60 : 30;
         if(cat.x < o.x + hitW && cat.x + 40 > o.x && cat.y < o.y + 30 && cat.y + 40 > o.y){
             if(o.type==='firewall'){
-                lives--; screenShake=20; playBeep(110, 0.2);
-                if(lives<=0){ gameActive=false; document.getElementById('game-over').style.display='block'; }
+                lives--; screenShake=20; playBeep(110, 0.2); triggerDamageEffect();
+                if(lives<=0){ 
+                    gameActive=false; 
+                    if(score > highScore) { highScore = score; localStorage.setItem('sphynxHighScore', highScore); }
+                    document.getElementById('game-over').style.display='block'; 
+                    document.getElementById('final-stats').innerHTML = `SESSION DATA: ${score}kb<br>SYSTEM RECORD: ${highScore}kb`;
+                }
             } else {
                 score+=10; pulseBadge(); screenShake=5; playBeep(880, 0.05);
             }
@@ -125,10 +137,9 @@ window.addEventListener('touchmove', e=>{ const rect = canvas.getBoundingClientR
 function resetGame(){ score=0; lives=3; obstacles=[]; gameActive=true; document.getElementById('game-over').style.display='none'; document.getElementById('score').innerText='DATA: 0kb'; document.getElementById('lives').innerText='NODES: 3'; update(); }
 function pulseBadge(){ const b=document.getElementById('credibility-badge'); b.classList.add('pulse'); setTimeout(()=>b.classList.remove('pulse'),100); }
 
-// --- BOOT SEQUENCE ---
 const output = document.getElementById('terminal-output');
 const bar = document.getElementById('loading-bar');
-const messages = ["> INITIALIZING MAXIMUM REALITY...", "> BYPASSING FIREWALL NODES...", "> LOCATING MOCHKIL_CAKE_CACHE...", "> DEPLOYING SPHYNX OVERDRIVE..."];
+const messages = ["> INITIALIZING MAXIMUM REALITY...", "> BYPASSING FIREWALL NODES...", "> LOCATING MOCHKIL_CAKE_CACHE...", "> SYSTEM RECORD DETECTED: " + highScore + "kb", "> DEPLOYING SPHYNX OVERDRIVE..."];
 let msgIndex = 0;
 function typeBoot() {
     if(msgIndex < messages.length){
@@ -142,8 +153,8 @@ function launch(){
     document.getElementById('game-container').style.display='block';
     for(let i=0;i<10;i++) buildings.push(new Building(Math.random()*W));
     for(let i=0;i<30;i++) butterflies.push(new Butterfly());
-    let loaded=0; const assets = [azulImg, mochNormal, mochSnack, firewallImg];
-    assets.forEach(img=>{ if(img.complete){ loaded++; if(loaded===4) update(); } else { img.onload=img.onerror=()=>{ loaded++; if(loaded===4) update(); }; } });
+    let loaded=0; const assets = [azulImg, mochNormal, firewallImg];
+    assets.forEach(img=>{ if(img.complete){ loaded++; if(loaded===3) update(); } else { img.onload=img.onerror=()=>{ loaded++; if(loaded===3) update(); }; } });
 }
 typeBoot();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sphynx-overdrive/sw.js'); }
