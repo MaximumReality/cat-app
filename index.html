@@ -2,29 +2,40 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Sphynx Overdrive: Maximum Reality</title>
+<link rel="manifest" href="/sphynx-overdrive/manifest.json">
+
 <style>
-  body {
+/* --- BODY & GAME CONTAINER --- */
+body {
     background: #000;
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    touch-action: none;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
-    margin: 0;
-    overflow: hidden;
-  }
-  #game-container {
+}
+
+#game-container {
     position: relative;
     width: 400px;
     height: 600px;
     background: #050505;
     border: 4px solid #ff00ff;
     box-shadow: 0 0 20px #ff00ff;
-    font-family: 'Courier New', monospace;
     overflow: hidden;
-  }
-  canvas { position: absolute; top: 0; left: 0; }
-  #ui {
+    display: none; /* start hidden until splash done */
+}
+
+/* --- CANVAS LAYERS --- */
+canvas { position: absolute; top: 0; left: 0; }
+
+/* --- UI --- */
+#ui {
     position: absolute;
     width: 100%;
     display: flex;
@@ -34,11 +45,15 @@
     text-shadow: 0 0 5px #00ffff;
     z-index: 10;
     box-sizing: border-box;
-  }
-  #game-over {
+    pointer-events: none;
+}
+
+/* --- GAME OVER SCREEN --- */
+#game-over {
     display: none;
     position: absolute;
-    top: 50%; left: 50%;
+    top: 50%;
+    left: 50%;
     transform: translate(-50%, -50%);
     text-align: center;
     color: #ff00ff;
@@ -46,207 +61,224 @@
     background: rgba(0,0,0,0.9);
     padding: 20px;
     border: 2px solid #00ffff;
-  }
-  button {
+}
+#game-over button {
     background: #00ffff;
     border: none;
     padding: 10px 20px;
     cursor: pointer;
     font-weight: bold;
-  }
-  .crt-overlay {
-    position: absolute; top: 0; left: 0;
-    width: 100%; height: 100%;
+}
+
+/* --- CRT Overlay --- */
+.crt-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
     background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.1) 50%),
                 linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03));
     background-size: 100% 3px, 3px 100%;
-    pointer-events: none; z-index: 5;
-  }
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* --- SPLASH SCREEN --- */
+#splash-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: #000;
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    padding: 20px;
+    box-sizing: border-box;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+}
+#terminal-output {
+    white-space: pre-wrap;
+    flex-grow: 1;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.4;
+}
+#loading-bar-container {
+    width: 100%;
+    height: 4px;
+    background: #002200;
+    margin-top: 10px;
+}
+#loading-bar {
+    width: 0%;
+    height: 100%;
+    background: #0f0;
+    transition: width 0.2s;
+}
+
+/* --- CREDIBILITY BADGE --- */
+#credibility-badge {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 80px;
+    z-index: 10000;
+    opacity: 0.85;
+    mix-blend-mode: screen;
+    pointer-events: none;
+    animation: glitch 1.5s infinite, flicker 0.2s infinite;
+}
+@keyframes flicker {
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 0.85; }
+    20%, 22%, 24%, 55% { opacity: 0.4; }
+}
+@keyframes glitch {
+    0% { transform: translate(0,0) rotate(0deg); filter: hue-rotate(0deg); }
+    20% { transform: translate(-2px,1px) rotate(-1deg); filter: hue-rotate(20deg); }
+    40% { transform: translate(2px,-1px) rotate(1deg); filter: hue-rotate(-20deg); }
+    60% { transform: translate(-1px,2px) rotate(0.5deg); filter: hue-rotate(10deg); }
+    80% { transform: translate(1px,-2px) rotate(-0.5deg); filter: hue-rotate(-10deg); }
+    100% { transform: translate(0,0) rotate(0deg); filter: hue-rotate(0deg); }
+}
+.pulse { transform: scale(1.3); transition: transform 0.1s ease; }
 </style>
 </head>
-<body>
 
-<div id="game-container">
-  <canvas id="bgCanvas"></canvas>
-  <canvas id="gameCanvas"></canvas>
-  <canvas id="particleCanvas"></canvas>
-  
-  <div id="ui">
-    <div id="score">DATA: 0kb</div>
-    <div id="lives">NODES: 3</div>
-  </div>
-  
-  <div class="crt-overlay"></div>
-  
-  <div id="game-over">
-    <h1>SYSTEM CRASHED</h1>
-    <button onclick="resetGame()">REBOOT</button>
-  </div>
+<body>
+<!-- SPLASH -->
+<div id="splash-screen">
+    <div id="terminal-output"></div>
+    <div id="loading-bar-container"><div id="loading-bar"></div></div>
 </div>
 
-<script>
-const W = 400, H = 600;
+<!-- GAME -->
+<div id="game-container">
+    <canvas id="bgCanvas"></canvas>
+    <canvas id="gameCanvas"></canvas>
+    <canvas id="particleCanvas"></canvas>
+    <div id="ui"><div id="score">DATA: 0kb</div><div id="lives">NODES: 3</div></div>
+    <div class="crt-overlay"></div>
+    <div id="game-over"><h1>SYSTEM CRASHED</h1><button onclick="resetGame()">REBOOT</button></div>
+</div>
 
-// Canvas contexts
+<!-- CREDIBILITY BADGE -->
+<img id="credibility-badge" src="credibility_badge.png" alt="Trusted Badge">
+
+<script>
+// --- SPLASH SCREEN LOGIC ---
+const output = document.getElementById('terminal-output');
+const bar = document.getElementById('loading-bar');
+const messages = [
+    "> INITIALIZING MAXIMUM REALITY...",
+    "> BYPASSING FIREWALL NODES...",
+    "> LOCATING MOCHKIL_CAKE_CACHE...",
+    "> CONNECTING TO AZUL_NEWS_NETWORK...",
+    "> DEPLOYING SPHYNX OVERDRIVE v1.0.4...",
+    "> REALITY TUNING: OPTIMAL."
+];
+let msgIndex = 0;
+function typeBootSequence() {
+    if(msgIndex < messages.length){
+        output.innerText += messages[msgIndex] + "\n";
+        msgIndex++;
+        bar.style.width = (msgIndex/messages.length)*100 + "%";
+        setTimeout(typeBootSequence, 400);
+    } else {
+        setTimeout(launchGame, 500);
+    }
+}
+
+// --- GAME LOGIC ---
+const W = 400, H = 600;
 const bgCanvas = document.getElementById('bgCanvas'), bctx = bgCanvas.getContext('2d');
 const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d');
 const pCanvas = document.getElementById('particleCanvas'), pctx = pCanvas.getContext('2d');
-
 bgCanvas.width = canvas.width = pCanvas.width = W;
 bgCanvas.height = canvas.height = pCanvas.height = H;
 
-// Game variables
 let score = 0, lives = 3, frame = 0, gameActive = true, screenShake = 0;
 let obstacles = [], buildings = [], butterflies = [];
 const cat = { x: 180, y: 520, w: 40, h: 40 };
 
-// --- Images ---
 const azulImg = new Image(); azulImg.src = 'flyazulo.png';
-const mochkilNormal = new Image(); mochkilNormal.src = 'mochkil_front_kart.png';
-const mochkilSnack = new Image(); mochkilSnack.src = 'mochkil_walk_right_cake.png';
+const mochNormal = new Image(); mochNormal.src = 'mochkil_front_kart.png';
+const mochSnack = new Image(); mochSnack.src = 'mochkil_walk_right_cake.png';
 
-// --- Mochkil ---
 const mochkil = { x: -50, y: 450, w: 40, h: 40, speed: 2, dir: 1, carryingSnack: true };
-function drawMochkil() {
-  const img = mochkil.carryingSnack ? mochkilSnack : mochkilNormal;
-  ctx.drawImage(img, mochkil.x, mochkil.y, mochkil.w, mochkil.h);
-}
 
-// --- Azul Desk ---
-function drawAzulDesk() {
-  ctx.drawImage(azulImg, 50, 50, 100, 40);
-}
-
-// --- Buildings ---
 class Building {
-  constructor(x) {
-    this.x = x; this.w = Math.random()*60+40; this.h = Math.random()*200+100;
-    this.y = Math.random()*H; this.speed = 0.5;
-    this.color = `hsl(280,100%,${Math.random()*10+2}%)`;
-  }
-  update(speed){ 
-    this.y += speed*this.speed; 
-    if(this.y > H){ this.y = -this.h; this.x = Math.random()*W; }
-  }
-  draw(){
-    bctx.fillStyle = this.color;
-    bctx.fillRect(this.x,this.y,this.w,this.h);
-    bctx.strokeStyle='#ff00ff22';
-    bctx.strokeRect(this.x,this.y,this.w,this.h);
-  }
+    constructor(x) { this.x=x; this.w=Math.random()*60+40; this.h=Math.random()*200+100; this.y=Math.random()*H; this.speed=0.5; this.color=`hsl(280,100%,${Math.random()*10+2}%)`; }
+    update(s){ this.y += s*this.speed; if(this.y>H){ this.y=-this.h; this.x=Math.random()*W; } }
+    draw(){ bctx.fillStyle=this.color; bctx.fillRect(this.x,this.y,this.w,this.h); bctx.strokeStyle='#ff00ff22'; bctx.strokeRect(this.x,this.y,this.w,this.h); }
 }
 
-// --- Butterflies ---
 class Butterfly {
-  constructor(){ this.x=Math.random()*W; this.y=Math.random()*H; this.vx=Math.random()*2-1; this.vy=Math.random()*2-1; }
-  update(){ this.x+=this.vx; this.y+=this.vy; if(this.x<0||this.x>W)this.vx*=-1; if(this.y<0||this.y>H)this.vy*=-1; }
-  draw(){ pctx.fillStyle='#00ffff44'; pctx.beginPath(); pctx.arc(this.x,this.y,2,0,Math.PI*2); pctx.fill(); }
+    constructor(){ this.x=Math.random()*W; this.y=Math.random()*H; this.vx=Math.random()*2-1; this.vy=Math.random()*2-1; }
+    update(){ this.x+=this.vx; this.y+=this.vy; if(this.x<0||this.x>W)this.vx*=-1; if(this.y<0||this.y>H)this.vy*=-1; }
+    draw(){ pctx.fillStyle='#00ffff44'; pctx.beginPath(); pctx.arc(this.x,this.y,2,0,Math.PI*2); pctx.fill(); }
 }
 
-// --- Screen Shake ---
-function applyScreenShake() {
-  if(screenShake > 0){
-    ctx.translate(Math.random()*screenShake - screenShake/2, Math.random()*screenShake - screenShake/2);
-    screenShake *= 0.9;
-  }
-}
+function applyShake(){ if(screenShake>0){ ctx.translate(Math.random()*screenShake-screenShake/2, Math.random()*screenShake-screenShake/2); screenShake*=0.9; } }
 
-// --- Update Loop ---
 function update(){
-  if(!gameActive) return;
+    if(!gameActive) return;
+    bctx.fillStyle='#050005'; bctx.fillRect(0,0,W,H);
+    buildings.forEach(b=>{ b.update(2+score/100); b.draw(); });
+    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H); applyShake();
+    ctx.drawImage(azulImg,50,50,100,40);
+    ctx.drawImage(mochkil.carryingSnack?mochSnack:mochNormal, mochkil.x, mochkil.y,40,40);
+    mochkil.x+=mochkil.speed*mochkil.dir; if(mochkil.x>W+50 || mochkil.x<-100) mochkil.dir*=-1;
+    ctx.font='40px serif'; ctx.shadowBlur=15; ctx.shadowColor='#00ffff'; ctx.fillText('🐈‍⬛',cat.x,cat.y+35); ctx.shadowBlur=0;
 
-  // Background
-  bctx.fillStyle = '#050005'; bctx.fillRect(0,0,W,H);
-  buildings.forEach(b=>{ b.update(2+score/100); b.draw(); });
+    if(frame%60===0) obstacles.push({ x:Math.random()*(W-40), y:-50, type:Math.random()>0.3?'firewall':'data', speed:3+score/100 });
+    obstacles.forEach((o,i)=>{
+        o.y+=o.speed; ctx.fillStyle=o.type==='firewall'?'#ff0055':'#00ff00'; ctx.fillRect(o.x,o.y,o.type==='firewall'?60:20,10);
+        if(cat.x<o.x+(o.type==='firewall'?60:20) && cat.x+40>o.x && cat.y<o.y+10 && cat.y+40>o.y){
+            if(o.type==='firewall'){ lives--; screenShake=20; if(lives<=0){ gameActive=false; document.getElementById('game-over').style.display='block'; } }
+            else { score+=10; pulseBadge(); screenShake=5; }
+            obstacles.splice(i,1); document.getElementById('score').innerText=`DATA: ${score}kb`; document.getElementById('lives').innerText=`NODES: ${lives}`;
+        }
+        if(o.y>H) obstacles.splice(i,1);
+    });
 
-  // Game Layer
-  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
-  applyScreenShake();
-  
-  drawAzulDesk();
-  drawMochkil();
-  mochkil.x += mochkil.speed * mochkil.dir;
-  if(mochkil.x>W+50 || mochkil.x<-100) mochkil.dir*=-1;
-
-  // Player Cat
-  ctx.font='40px serif';
-  ctx.shadowBlur=15; ctx.shadowColor='#00ffff';
-  ctx.fillText('🐈‍⬛',cat.x,cat.y+35);
-  ctx.shadowBlur=0;
-
-  // Obstacles
-  if(frame%60===0){
-    const type = Math.random()>0.3?'firewall':'data';
-    obstacles.push({ x:Math.random()*(W-40), y:-50, type, speed:3+score/100 });
-  }
-  obstacles.forEach((o,i)=>{
-    o.y += o.speed;
-    ctx.fillStyle = o.type==='firewall'?'#ff0055':'#00ff00';
-    ctx.fillRect(o.x,o.y,o.type==='firewall'?60:20,10);
-
-    if(cat.x<o.x+(o.type==='firewall'?60:20) && cat.x+40>o.x && cat.y<o.y+10 && cat.y+40>o.y){
-      if(o.type==='firewall'){ lives--; screenShake=20;
-        if(lives<=0){ gameActive=false; document.getElementById('game-over').style.display='block'; }
-      } else { score+=10; screenShake=5; }
-      obstacles.splice(i,1);
-      document.getElementById('score').innerText = `DATA: ${score}kb`;
-      document.getElementById('lives').innerText = `NODES: ${lives}`;
-    }
-    if(o.y>H) obstacles.splice(i,1);
-  });
-
-  // Particles
-  pctx.clearRect(0,0,W,H);
-  butterflies.forEach(b=>{ b.update(); b.draw(); });
-
-  frame++;
-  requestAnimationFrame(update);
+    pctx.clearRect(0,0,W,H); butterflies.forEach(b=>{ b.update(); b.draw(); });
+    frame++; requestAnimationFrame(update);
 }
 
-// --- Controls ---
-function updateCatX(x){
-  cat.x = Math.min(Math.max(x,0),W-cat.w);
-}
-window.addEventListener('mousemove', e=>{
-  const rect = canvas.getBoundingClientRect();
-  updateCatX(e.clientX - rect.left - cat.w/2);
-});
-window.addEventListener('touchmove', e=>{
-  if(!gameActive) return;
-  const rect = canvas.getBoundingClientRect();
-  const touch = e.touches[0];
-  updateCatX(touch.clientX - rect.left - cat.w/2);
-  e.preventDefault();
-},{passive:false});
+function moveCat(x){ cat.x = Math.min(Math.max(x,0),W-cat.w); }
+window.addEventListener('mousemove', e=>{ const rect = canvas.getBoundingClientRect(); moveCat(e.clientX-rect.left-20); });
+window.addEventListener('touchmove', e=>{ const rect = canvas.getBoundingClientRect(); moveCat(e.touches[0].clientX-rect.left-20); e.preventDefault(); },{passive:false});
 
-// --- Reset ---
-function resetGame(){
-  score=0; lives=3; obstacles=[]; gameActive=true;
-  document.getElementById('game-over').style.display='none';
-  document.getElementById('score').innerText='DATA: 0kb';
-  document.getElementById('lives').innerText='NODES: 3';
-  update();
+function resetGame(){ score=0; lives=3; obstacles=[]; gameActive=true; document.getElementById('game-over').style.display='none'; document.getElementById('score').innerText='DATA: 0kb'; document.getElementById('lives').innerText='NODES: 3'; update(); }
+
+/* --- IMAGES & INIT --- */
+let buildings = [], butterflies = [];
+function initEngine(){
+    for(let i=0;i<10;i++) buildings.push(new Building(Math.random()*W));
+    for(let i=0;i<30;i++) butterflies.push(new Butterfly());
+    let loaded=0;
+    [azulImg, mochNormal, mochSnack].forEach(img=>{ img.onload=img.onerror=()=>{ loaded++; if(loaded===3) update(); }; });
 }
 
-// --- Init ---
-for(let i=0;i<10;i++) buildings.push(new Building(Math.random()*W));
-for(let i=0;i<30;i++) butterflies.push(new Butterfly());
-
-// --- Wait for images to load ---
-let imagesLoaded = 0;
-[azulImg, mochkilNormal, mochkilSnack].forEach(img=>{
-  img.onload = ()=>{
-    imagesLoaded++;
-    if(imagesLoaded===3) update();
-  }
-});
-
-// --- Optional: Service Worker ---
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js')
-    .then(()=>console.log('Maximum Reality: Offline Mode Active'))
-    .catch(err=>console.log('PWA Error:',err));
+/* --- GAME LAUNCH --- */
+function launchGame(){
+    document.getElementById('splash-screen').style.display='none';
+    document.getElementById('game-container').style.display='block';
+    pulseBadge(); // Badge pulses on game start
+    initEngine();
 }
+typeBootSequence();
+
+/* --- CREDIBILITY BADGE PULSE --- */
+function pulseBadge(){
+    const badge=document.getElementById('credibility-badge');
+    badge.classList.add('pulse');
+    setTimeout(()=>badge.classList.remove('pulse'),100);
+}
+
+/* --- SERVICE WORKER --- */
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sphynx-overdrive/sw.js'); }
 </script>
 </body>
 </html>
